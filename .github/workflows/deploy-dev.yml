@@ -1,0 +1,35 @@
+# 开发环境部署：推送到 dev 分支时构建并输出产物（可对接 Vercel/Railway 等）
+name: Deploy Dev
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  build:
+    name: Build Dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build Backend
+        run: |
+          cd backend && npm install && cd ..
+      - name: Build Frontend
+        run: |
+          cd frontend && npm install && npm run build && cd ..
+        env:
+          # 开发环境 API 地址，按实际部署的后端 URL 修改
+          VITE_API_BASE: ${{ vars.VITE_API_BASE_DEV || 'https://your-backend-dev.example.com' }}
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-files
+          path: backend/

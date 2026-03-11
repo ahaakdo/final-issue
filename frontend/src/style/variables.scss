@@ -1,0 +1,32 @@
+/* pure-admin 风格变量 */
+:root {
+  --side-bar-width: 210px;
+  --side-bar-width-collapse: 54px;
+  --pure-menu-bg: #001529;
+  --pure-sidebar-logo-bg: #001529;
+  --pure-border-color: rgba(255, 255, 255, 0.05);
+  --pure-transition-duration: 0.28s;
+  --app-main-bg: #f0f2f5;
+  --navbar-bg: #fff;
+  --navbar-text: #5a5e66;
+  --navbar-link: #000000d9;
+}
+
+body[layout="vertical"] {
+  --side-bar-width: 210px;
+  --side-bar-width-collapse: 54px;
+}
+
+/* 暗色模式 */
+html.dark {
+  --app-main-bg: #1a1a1a;
+  --navbar-bg: #141414;
+  --navbar-text: rgba(255, 255, 255, 0.85);
+  --navbar-link: rgba(255, 255, 255, 0.9);
+  --el-bg-color: #242424;
+  --el-bg-color-page: #1a1a1a;
+  --el-text-color-primary: rgba(255, 255, 255, 0.9);
+  --el-text-color-regular: rgba(255, 255, 255, 0.75);
+  --el-card-bg-color: #242424;
+  --el-border-color: rgba(255, 255, 255, 0.12);
+}

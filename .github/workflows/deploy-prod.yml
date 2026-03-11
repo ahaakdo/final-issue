@@ -1,0 +1,35 @@
+# 生产环境部署：推送到 main 分支时构建
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build Production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build Backend
+        run: |
+          cd backend && npm install && cd ..
+      - name: Build Frontend
+        run: |
+          cd frontend && npm install && npm run build && cd ..
+        env:
+          # 生产环境 API 地址，在仓库 Settings -> Variables 中配置
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-files
+          path: backend/

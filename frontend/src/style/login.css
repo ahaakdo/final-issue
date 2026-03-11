@@ -1,0 +1,398 @@
+/* 登录/注册 - 表单样式增强 */
+.wave {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 40%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.login-container,
+.register-container {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.login-left,
+.register-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(145deg, #001529 0%, #002140 40%, #003366 100%);
+  padding: 3rem;
+  position: relative;
+  overflow: hidden;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.login-left .left-icon,
+.register-left .left-icon {
+  margin-bottom: 20px;
+  z-index: 1;
+  color: rgba(255, 255, 255, 0.95);
+  opacity: 0.95;
+}
+
+.login-left .title,
+.register-left .title {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 8px;
+  z-index: 1;
+  letter-spacing: 0.5px;
+}
+
+.login-left .subtitle,
+.register-left .subtitle {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+  text-align: center;
+  z-index: 1;
+  letter-spacing: 0.3px;
+}
+
+.login-right,
+.register-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #e8eef3 0%, #f0f2f5 100%);
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+/* 注册页滚动条：变细，悬停容器时才显示 */
+.register-right,
+.register-form-card {
+  scrollbar-width: thin;
+}
+.register-right::-webkit-scrollbar,
+.register-form-card::-webkit-scrollbar {
+  width: 6px;
+}
+.register-right::-webkit-scrollbar-track,
+.register-form-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.register-right::-webkit-scrollbar-thumb,
+.register-form-card::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.register-right:hover::-webkit-scrollbar-thumb,
+.register-form-card:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+}
+.register-right::-webkit-scrollbar-thumb:hover,
+.register-form-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+/* 表单卡片 - 统一样式 */
+.login-form-card,
+.register-form-card {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 21, 41, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  padding: 28px 36px 40px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 表单标题行：图标 + 文案，居中 */
+.login-form-card .form-header,
+.register-form-card .form-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.login-form-card .form-header-icon,
+.register-form-card .form-header-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.login-form-card .form-header-text .form-title,
+.register-form-card .form-header-text .form-title {
+  margin: 0 0 2px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  letter-spacing: 0.3px;
+  text-align: center;
+}
+
+.login-form-card .form-header-text .form-desc,
+.register-form-card .form-header-text .form-desc {
+  margin: 0;
+  font-size: 13px;
+  color: #8c8c8c;
+  text-align: center;
+}
+
+
+.login-form-card :deep(.el-form-item) {
+  margin-bottom: 20px;
+}
+
+.login-form-card :deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #262626;
+}
+
+.login-form-card :deep(.el-input__wrapper),
+.register-form-card :deep(.el-input__wrapper) {
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px #e8e8e8;
+  padding: 4px 12px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.login-form-card :deep(.el-input__wrapper:hover),
+.register-form-card :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #409eff;
+}
+
+.login-form-card :deep(.el-input__wrapper.is-focus),
+.register-form-card :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.3);
+}
+
+/* 校验失败：输入框浅红底、浅红边框 */
+.login-form-card :deep(.el-form-item.is-error .el-input__wrapper),
+.register-form-card :deep(.el-form-item.is-error .el-input__wrapper) {
+  background-color: #fef5f5 !important;
+  box-shadow: 0 0 0 1px #e08a8a, inset 0 0 0 1px #e08a8a !important;
+}
+.login-form-card :deep(.el-form-item.is-error .el-input__wrapper:hover),
+.register-form-card :deep(.el-form-item.is-error .el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #d07070, inset 0 0 0 1px #d07070 !important;
+}
+.login-form-card :deep(.el-form-item.is-error .el-textarea__inner),
+.register-form-card :deep(.el-form-item.is-error .el-textarea__inner) {
+  background-color: #fef5f5 !important;
+  border: 1px solid #e08a8a !important;
+  box-shadow: none !important;
+}
+.login-form-card :deep(.el-form-item.is-error .el-input-number .el-input__wrapper),
+.register-form-card :deep(.el-form-item.is-error .el-input-number .el-input__wrapper) {
+  background-color: #fef5f5 !important;
+  box-shadow: 0 0 0 1px #e08a8a, inset 0 0 0 1px #e08a8a !important;
+}
+
+.login-form-card :deep(.el-radio-group),
+.register-form-card :deep(.el-radio-group) {
+  width: 100%;
+}
+
+.login-form-card :deep(.el-radio-button__inner),
+.register-form-card :deep(.el-radio-button__inner) {
+  padding: 6px 16px;
+  font-size: 14px;
+  height: auto;
+  line-height: 1.4;
+}
+
+/* 学生：仅左侧圆角；教师：仅右侧圆角 */
+.login-form-card :deep(.el-radio-button:first-child .el-radio-button__inner),
+.register-form-card :deep(.el-radio-button:first-child .el-radio-button__inner) {
+  border-radius: 8px 0 0 8px;
+}
+.login-form-card :deep(.el-radio-button:last-child .el-radio-button__inner),
+.register-form-card :deep(.el-radio-button:last-child .el-radio-button__inner) {
+  border-radius: 0 8px 8px 0;
+}
+
+.login-form-card .submit-btn-wrap,
+.register-form-card .submit-btn-wrap {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.login-form-card .submit-btn-wrap .el-button,
+.register-form-card .submit-btn-wrap .el-button {
+  width: 100%;
+  height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+}
+
+.form-footer-link {
+  display: block;
+  text-align: center;
+  margin-top: 20px;
+  padding: 10px 0;
+  font-size: 14px;
+  color: #409eff;
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.form-footer-link:hover {
+  color: #66b1ff;
+  background: rgba(64, 158, 255, 0.06);
+}
+
+/* 注册页分区 */
+.register-form-card :deep(.el-divider__text) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #595959;
+  background: #fff;
+  padding: 0 12px;
+}
+
+.register-form-card :deep(.el-divider) {
+  margin: 24px 0 16px;
+}
+
+.register-form-card :deep(.el-input-number) {
+  width: 100%;
+}
+
+.register-form-card :deep(.el-input-number .el-input__wrapper) {
+  border-radius: 10px;
+}
+
+/* 暗色模式：登录/注册页 */
+html.dark .login-right,
+html.dark .register-right {
+  background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
+}
+html.dark .login-form-card,
+html.dark .register-form-card {
+  background: #242424;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+/* 暗色模式：表单标题旁排球 logo 变白 */
+html.dark .login-form-card .form-header-icon,
+html.dark .register-form-card .form-header-icon {
+  filter: brightness(0) invert(1);
+}
+html.dark .login-form-card .form-header-text .form-title,
+html.dark .register-form-card .form-header-text .form-title {
+  color: rgba(255, 255, 255, 0.9);
+}
+html.dark .login-form-card .form-header-text .form-desc,
+html.dark .register-form-card .form-header-text .form-desc {
+  color: rgba(255, 255, 255, 0.5);
+}
+html.dark .login-form-card :deep(.el-form-item__label),
+html.dark .register-form-card :deep(.el-form-item__label) {
+  color: rgba(255, 255, 255, 0.85);
+}
+html.dark .login-form-card :deep(.el-input__wrapper),
+html.dark .register-form-card :deep(.el-input__wrapper) {
+  background-color: #2c2c2c;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+html.dark .login-form-card :deep(.el-form-item.is-error .el-input__wrapper),
+html.dark .register-form-card :deep(.el-form-item.is-error .el-input__wrapper) {
+  background-color: #3d2525 !important;
+  box-shadow: 0 0 0 1px #e08a8a, inset 0 0 0 1px #e08a8a !important;
+}
+html.dark .login-form-card :deep(.el-form-item.is-error .el-input__wrapper:hover),
+html.dark .register-form-card :deep(.el-form-item.is-error .el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #e8a0a0, inset 0 0 0 1px #e8a0a0 !important;
+}
+html.dark .login-form-card :deep(.el-form-item.is-error .el-textarea__inner),
+html.dark .register-form-card :deep(.el-form-item.is-error .el-textarea__inner) {
+  background-color: #3d2525 !important;
+  border: 1px solid #e08a8a !important;
+}
+html.dark .login-form-card :deep(.el-form-item.is-error .el-input-number .el-input__wrapper),
+html.dark .register-form-card :deep(.el-form-item.is-error .el-input-number .el-input__wrapper) {
+  background-color: #3d2525 !important;
+  box-shadow: 0 0 0 1px #e08a8a, inset 0 0 0 1px #e08a8a !important;
+}
+html.dark .login-form-card :deep(.el-input__wrapper:hover),
+html.dark .register-form-card :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #409eff;
+}
+html.dark .login-form-card :deep(.el-input__inner),
+html.dark .register-form-card :deep(.el-input__inner),
+html.dark .login-form-card :deep(.el-input__wrapper .el-input__inner),
+html.dark .register-form-card :deep(.el-input__wrapper .el-input__inner) {
+  color: rgba(255, 255, 255, 0.9);
+  --el-input-text-color: rgba(255, 255, 255, 0.9);
+  --el-input-placeholder-color: rgba(255, 255, 255, 0.35);
+}
+/* 暗色模式：身份选择器未选中为深色 */
+html.dark .login-form-card :deep(.el-radio-button__inner),
+html.dark .register-form-card :deep(.el-radio-button__inner) {
+  background-color: #2c2c2c;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+html.dark .login-form-card :deep(.el-radio-button:not(.is-active) .el-radio-button__inner),
+html.dark .register-form-card :deep(.el-radio-button:not(.is-active) .el-radio-button__inner) {
+  background-color: #2c2c2c;
+  color: rgba(255, 255, 255, 0.9);
+}
+html.dark .login-form-card :deep(.el-radio-button.is-active .el-radio-button__inner),
+html.dark .register-form-card :deep(.el-radio-button.is-active .el-radio-button__inner) {
+  background-color: #409eff;
+  border-color: #409eff;
+  color: #fff;
+}
+html.dark .login-form-card .form-footer-link,
+html.dark .register-form-card .form-footer-link {
+  color: rgba(255, 255, 255, 0.6);
+}
+html.dark .login-form-card .form-footer-link:hover,
+html.dark .register-form-card .form-footer-link:hover {
+  color: #409eff;
+}
+html.dark .register-right:hover::-webkit-scrollbar-thumb,
+html.dark .register-form-card:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+html.dark .register-right::-webkit-scrollbar-thumb:hover,
+html.dark .register-form-card::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+@media screen and (max-width: 968px) {
+  .login-container,
+  .register-container {
+    grid-template-columns: 1fr;
+  }
+
+  .login-left,
+  .register-left {
+    display: none;
+  }
+
+  .login-right,
+  .register-right {
+    padding: 24px 16px;
+  }
+
+  .login-form-card,
+  .register-form-card {
+    padding: 28px 24px;
+    max-width: 100%;
+  }
+}
