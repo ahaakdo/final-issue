@@ -54,6 +54,137 @@ enrollmentsRouter.get(
   }
 );
 
+// -------- 学生端：查看自己在某课程的考勤与成绩 --------
+
+// 学生查看自己在某课程的考勤汇总与明细
+enrollmentsRouter.get(
+  "/student/courses/:courseId/attendance-summary",
+  optionalAuth,
+  requireStudent,
+  async (req, res) => {
+    try {
+      const studentId = req.auth.userId;
+      const courseId = Number(req.params.courseId);
+      if (!courseId || courseId < 1) {
+        return res.status(400).json({ code: 400, message: "无效的课程id" });
+      }
+      // 仅已报名或已结课仍保留记录的学生可查看
+      const [enroll] = await query(
+        `SELECT e.id, e.status, c.name AS course_name
+         FROM course_enrollments e
+         JOIN courses c ON e.course_id = c.id
+         WHERE e.course_id = ? AND e.student_id = ?`,
+        [courseId, studentId]
+      );
+      if (!enroll) {
+        return res.status(403).json({ code: 403, message: "仅报名学生可查看考勤" });
+      }
+      // 课程总考勤次数
+      const [totalRow] = await query(
+        "SELECT COUNT(DISTINCT attend_date) AS total FROM course_attendance WHERE course_id = ?",
+        [courseId]
+      );
+      const totalSessions = Number(totalRow?.total ?? 0) || 0;
+      // 当前学生的出勤次数（present + late）
+      const [attRow] = await query(
+        `SELECT COUNT(*) AS cnt FROM course_attendance
+         WHERE course_id = ? AND student_id = ? AND status IN ('present','late')`,
+        [courseId, studentId]
+      );
+      const attendanceCount = Number(attRow?.cnt ?? 0) || 0;
+      const attendanceRate = totalSessions > 0 ? attendanceCount / totalSessions : 0;
+      const attendanceScore = attendanceRate * 40;
+      const records = await query(
+        `SELECT attend_date, status, note
+         FROM course_attendance
+         WHERE course_id = ? AND student_id = ?
+         ORDER BY attend_date ASC`,
+        [courseId, studentId]
+      );
+      return res.json({
+        code: 0,
+        data: {
+          course_id: courseId,
+          course_name: enroll.course_name,
+          total_sessions: totalSessions,
+          attendance_count: attendanceCount,
+          attendance_rate: Number((attendanceRate * 100).toFixed(2)),
+          attendance_score: Math.round(attendanceScore * 100) / 100,
+          records,
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ code: 500, message: "获取考勤信息失败" });
+    }
+  }
+);
+
+// 学生查看自己在某课程的成绩（含出勤得分与总评）
+enrollmentsRouter.get(
+  "/student/courses/:courseId/grade",
+  optionalAuth,
+  requireStudent,
+  async (req, res) => {
+    try {
+      const studentId = req.auth.userId;
+      const courseId = Number(req.params.courseId);
+      if (!courseId || courseId < 1) {
+        return res.status(400).json({ code: 400, message: "无效的课程id" });
+      }
+      const [enroll] = await query(
+        `SELECT e.id, e.status, c.name AS course_name
+         FROM course_enrollments e
+         JOIN courses c ON e.course_id = c.id
+         WHERE e.course_id = ? AND e.student_id = ?`,
+        [courseId, studentId]
+      );
+      if (!enroll) {
+        return res.status(403).json({ code: 403, message: "仅报名学生可查看成绩" });
+      }
+      const [grade] = await query(
+        `SELECT score, grade_level, comment
+         FROM course_grades
+         WHERE course_id = ? AND student_id = ?`,
+        [courseId, studentId]
+      );
+      // 出勤相关
+      const [totalRow] = await query(
+        "SELECT COUNT(DISTINCT attend_date) AS total FROM course_attendance WHERE course_id = ?",
+        [courseId]
+      );
+      const totalSessions = Number(totalRow?.total ?? 0) || 0;
+      const [attRow] = await query(
+        `SELECT COUNT(*) AS cnt FROM course_attendance
+         WHERE course_id = ? AND student_id = ? AND status IN ('present','late')`,
+        [courseId, studentId]
+      );
+      const attendanceCount = Number(attRow?.cnt ?? 0) || 0;
+      const attendanceScore =
+        totalSessions > 0 ? (attendanceCount / totalSessions) * 40 : 0;
+      const examScore = grade?.score != null ? Number(grade.score) : 0;
+      const totalScore = attendanceScore + examScore * 0.6;
+      return res.json({
+        code: 0,
+        data: {
+          course_id: courseId,
+          course_name: enroll.course_name,
+          score: grade?.score != null ? Number(grade.score) : null,
+          grade_level: grade?.grade_level || "",
+          comment: grade?.comment || "",
+          total_sessions: totalSessions,
+          attendance_count: attendanceCount,
+          attendance_score: Math.round(attendanceScore * 100) / 100,
+          total_score: Math.round(totalScore * 100) / 100,
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ code: 500, message: "获取成绩信息失败" });
+    }
+  }
+);
+
 // 考勤列表（指定日期）
 enrollmentsRouter.get(
   "/teacher/courses/:courseId/attendance",

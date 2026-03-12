@@ -5,6 +5,16 @@ export function getMyEnrollments() {
   return http.get("/student/enrollments");
 }
 
+/** 学生端：查看某课程的考勤汇总与明细 */
+export function getStudentCourseAttendanceSummary(courseId) {
+  return http.get(`/student/courses/${courseId}/attendance-summary`);
+}
+
+/** 学生端：查看某课程的成绩情况 */
+export function getStudentCourseGrade(courseId) {
+  return http.get(`/student/courses/${courseId}/grade`);
+}
+
 /** 报名课程 */
 export function enrollCourse(courseId) {
   return http.post(`/courses/${courseId}/enroll`);

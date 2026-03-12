@@ -191,7 +191,7 @@
 
 <script setup>
 defineOptions({ name: "CourseRoster" });
-import { ref, reactive, computed, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import {
@@ -204,6 +204,7 @@ import {
   sendCourseMessageToStudent,
 } from "@/api/enroll";
 import { formatRelativeTime } from "@/utils/format";
+import { getToken } from "@/utils/auth";
 
 const route = useRoute();
 const router = useRouter();
@@ -225,6 +226,7 @@ const chatMessages = ref([]);
 const chatLoading = ref(false);
 const chatInput = ref("");
 const chatSending = ref(false);
+const wsRef = ref(null);
 
 const enrolledCount = computed(
   () => roster.value.filter((r) => r.status === "enrolled").length
@@ -423,6 +425,7 @@ async function openChat(row) {
   chatVisible.value = true;
   chatInput.value = "";
   await loadChat();
+  connectWsIfNeeded();
 }
 
 /** 从导航栏消息下拉跳转过来时，根据 query.openChat 自动打开对应学生的聊天 */
@@ -453,6 +456,83 @@ async function loadChat() {
   }
 }
 
+function buildWsUrl() {
+  const loc = window.location;
+  const protocol = loc.protocol === "https:" ? "wss:" : "ws:";
+
+  if (import.meta.env.VITE_API_BASE) {
+    return import.meta.env.VITE_API_BASE.replace(/^http/, "ws") + "/ws/course-chat";
+  }
+
+  if (import.meta.env.DEV) {
+    return `${protocol}//localhost:3000/ws/course-chat`;
+  }
+
+  return `${protocol}//${loc.host}/ws/course-chat`;
+}
+
+function connectWsIfNeeded() {
+  if (wsRef.value || !chatStudent.value) return;
+  const token = getToken();
+  if (!token) return;
+  const url = buildWsUrl();
+  const ws = new WebSocket(url);
+  wsRef.value = ws;
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "auth", token: `Bearer ${token}` }));
+  };
+
+  ws.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (msg.type === "auth-ok") {
+      ws.send(
+        JSON.stringify({
+          type: "join",
+          courseId,
+          // 教师自己的 id 由服务端根据 token 补全
+          teacherId: undefined,
+          studentId: chatStudent.value?.student_id || null,
+        })
+      );
+      return;
+    }
+    if (msg.type === "joined") {
+      return;
+    }
+    if (msg.type === "new-message") {
+      if (
+        msg.courseId === courseId &&
+        chatStudent.value &&
+        msg.studentId === chatStudent.value.student_id
+      ) {
+        chatMessages.value.push({
+          id: `ws-${Date.now()}`,
+          sender: msg.sender === "teacher" ? "teacher" : "student",
+          content: msg.content,
+          created_at: msg.created_at,
+        });
+      }
+    }
+  };
+
+  ws.onclose = () => {
+    wsRef.value = null;
+  };
+}
+
+function closeWs() {
+  if (wsRef.value) {
+    wsRef.value.close();
+    wsRef.value = null;
+  }
+}
+
 async function sendChat() {
   if (!chatInput.value.trim() || !chatStudent.value) {
     ElMessage.warning("请输入要发送的内容");
@@ -465,8 +545,21 @@ async function sendChat() {
       chatStudent.value.student_id,
       chatInput.value.trim()
     );
+    const content = chatInput.value.trim();
     chatInput.value = "";
-    await loadChat();
+    if (wsRef.value && wsRef.value.readyState === WebSocket.OPEN) {
+      wsRef.value.send(
+        JSON.stringify({
+          type: "new-message",
+          courseId,
+          teacherId: null,
+          studentId: chatStudent.value.student_id,
+          content,
+        })
+      );
+    } else {
+      await loadChat();
+    }
   } catch {
     ElMessage.error("发送失败");
   } finally {
@@ -475,7 +568,10 @@ async function sendChat() {
 }
 
 watch(chatVisible, (v) => {
-  if (!v) window.dispatchEvent(new CustomEvent("course-messages-read"));
+  if (!v) {
+    window.dispatchEvent(new CustomEvent("course-messages-read"));
+    closeWs();
+  }
 });
 
 watch(
@@ -492,6 +588,10 @@ onMounted(async () => {
   attendDate.value = today.toISOString().slice(0, 10);
   await loadAttendance();
   await loadGrades();
+});
+
+onBeforeUnmount(() => {
+  closeWs();
 });
 </script>
 

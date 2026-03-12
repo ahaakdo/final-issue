@@ -16,20 +16,16 @@
 
     <section class="cards">
       <el-row :gutter="20">
-        <el-col
-          v-for="player in players"
-          :key="player.id"
-          :xs="24"
-          :sm="12"
-          :md="8"
-        >
+        <el-col v-for="player in players" :key="player.id" :xs="24" :sm="12" :md="8">
           <div class="player-card" @click="openDetail(player)">
-            <div class="player-avatar" v-if="player.avatar_url">
-              <img :src="player.avatar_url" :alt="player.name" />
-            </div>
-            <div class="player-header">
-              <span class="player-number">#{{ player.number }}</span>
-              <h3 class="player-name">{{ player.name }}</h3>
+            <div class="player-top">
+              <div class="player-avatar" v-if="player.avatar_url">
+                <img :src="player.avatar_url" :alt="player.name" />
+              </div>
+              <div class="player-header">
+                <span class="player-number">#{{ player.number }}</span>
+                <h3 class="player-name">{{ player.name }}</h3>
+              </div>
             </div>
             <div class="player-meta">
               <el-tag size="small" type="warning" round>{{ player.position }}</el-tag>
@@ -245,6 +241,13 @@ function openDetail(player) {
   border-color: rgba(64, 158, 255, 0.4);
 }
 
+.player-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .player-header {
   display: flex;
   align-items: baseline;
@@ -257,7 +260,6 @@ function openDetail(player) {
   height: 56px;
   border-radius: 50%;
   overflow: hidden;
-  margin-bottom: 8px;
   border: 2px solid rgba(255, 255, 255, 0.6);
 }
 
