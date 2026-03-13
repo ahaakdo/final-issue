@@ -14,6 +14,7 @@ import { enrollmentsRouter } from "./routes/enrollments.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { rioRouter } from "./routes/rio.js";
 import { classicMatchesRouter } from "./routes/classic-matches.js";
+import { skillsRouter } from "./routes/skills.js";
 import { query } from "../db/connection.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,7 @@ app.use("/api", enrollmentsRouter);
 app.use("/api", notificationsRouter);
 app.use("/api", rioRouter);
 app.use("/api", classicMatchesRouter);
+app.use("/api", skillsRouter);
 app.use("/api", authRouter);
 
 app.get("/api/health", (_, res) => {

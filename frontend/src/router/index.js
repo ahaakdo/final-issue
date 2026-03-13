@@ -70,6 +70,18 @@ const routes = [
         meta: { title: "经典赛事", role: "student" },
       },
       {
+        path: "skills",
+        name: "Skills",
+        component: () => import("@/views/skills/index.vue"),
+        meta: { title: "技能养成", role: "student" },
+      },
+      {
+        path: "skills/manage",
+        name: "SkillsManage",
+        component: () => import("@/views/skills/manage.vue"),
+        meta: { title: "技能与队伍管理", role: "teacher" },
+      },
+      {
         path: "course/manage",
         name: "CourseManage",
         component: () => import("@/views/course/manage.vue"),

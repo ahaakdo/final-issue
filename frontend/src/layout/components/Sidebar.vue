@@ -38,6 +38,10 @@
             <el-icon><Bell /></el-icon>
             <template #title>通知中心</template>
           </el-menu-item>
+          <el-menu-item index="/skills">
+            <el-icon><TrophyBase /></el-icon>
+            <template #title>技能养成</template>
+          </el-menu-item>
           <el-menu-item index="/rio">
             <el-icon><TrophyBase /></el-icon>
             <template #title>女排专栏</template>
@@ -52,6 +56,10 @@
           <template #title>个人信息</template>
         </el-menu-item>
         <template v-if="userStore.role === 'teacher'">
+          <el-menu-item index="/skills/manage">
+            <el-icon><TrophyBase /></el-icon>
+            <template #title>技能与队伍管理</template>
+          </el-menu-item>
           <el-menu-item index="/category">
             <el-icon><Collection /></el-icon>
             <template #title>课程分类</template>

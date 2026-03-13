@@ -12,25 +12,44 @@ async function seed() {
   const studentPassword = await hash("123456");
   const teacherPassword = await hash("123456");
 
-  // 学生示例（学号在插入时由 nextStudentNumber 生成，这里先查是否已存在）
+  // 学生示例：如果当前没有学生，则插入约 50 个学生账号，供组队与技能演示使用
   const existingStudents = await query("SELECT id FROM students LIMIT 1");
   if (existingStudents.length === 0) {
-    await query(
-      `INSERT INTO students (username, password, student_number, real_name, email, phone, major, gender, birthday, dormitory) VALUES
-       (?, ?, '2025001', '张三', 'zhangsan@edu.cn', '13800138001', '体育教育', 1, '2005-03-15', '1号楼301'),
-       (?, ?, '2025002', '李四', 'lisi@edu.cn', '13800138002', '运动训练', 1, '2005-07-20', '1号楼302'),
-       (?, ?, '2025003', '王芳', 'wangfang@edu.cn', '13800138003', '体育教育', 0, '2005-01-08', '2号楼101'),
-       (?, ?, '2025004', '赵明', 'zhaoming@edu.cn', '13800138004', '社会体育', 1, '2004-11-22', '1号楼405'),
-       (?, ?, '2025005', '陈静', 'chenjing@edu.cn', '13800138005', '运动训练', 0, '2005-05-30', '2号楼205')`,
-      [
-        "student1", studentPassword,
-        "student2", studentPassword,
-        "student3", studentPassword,
-        "student4", studentPassword,
-        "student5", studentPassword,
-      ]
-    );
-    console.log("Inserted 5 students (student1~5 / 123456).");
+    const majors = ["体育教育", "运动训练", "社会体育", "排球专项"];
+    const genders = [0, 1];
+    const values = [];
+    const rows = [];
+    for (let i = 1; i <= 50; i++) {
+      const username = `stu${i}`;
+      const studentNo = `2026${String(100 + i).slice(1)}`; // 简单生成一个 2026 开头的学号
+      const realName = `学生${i}`;
+      const email = `stu${i}@edu.cn`;
+      const phone = `1380000${String(100 + i).slice(1)}`;
+      const major = majors[i % majors.length];
+      const gender = genders[i % genders.length];
+      const dorm = `${1 + (i % 4)}号楼${200 + i}室`;
+      rows.push(
+        "(?, ?, ?, ?, ?, ?, ?, ?, '2005-01-01', ?)"
+      );
+      values.push(
+        username,
+        studentPassword,
+        studentNo,
+        realName,
+        email,
+        phone,
+        major,
+        gender,
+        dorm
+      );
+    }
+    const sql = `
+      INSERT INTO students
+        (username, password, student_number, real_name, email, phone, major, gender, birthday, dormitory)
+      VALUES
+        ${rows.join(",")}`;
+    await query(sql, values);
+    console.log("Inserted 50 students (stu1~stu50 / 123456).");
   } else {
     console.log("Students already exist, skip seed.");
   }
@@ -49,7 +68,27 @@ async function seed() {
     );
     console.log("Inserted 2 teachers (teacher1, teacher2 / 123456).");
   } else {
-    console.log("Teachers already exist, skip seed.");
+    console.log("Teachers already exist, skip base teacher seed.");
+    // 额外确保 teacher3/teacher4/teacher5 存在
+    const extraTeachers = [
+      { username: "teacher3", real_name: "王老师" },
+      { username: "teacher4", real_name: "张老师" },
+      { username: "teacher5", real_name: "李老师" },
+    ];
+    for (const t of extraTeachers) {
+      const rows = await query(
+        "SELECT id FROM teachers WHERE username = ?",
+        [t.username]
+      );
+      if (!rows.length) {
+        await query(
+          `INSERT INTO teachers (username, password, real_name, major, gender)
+           VALUES (?, ?, ?, '排球', 1)`,
+          [t.username, teacherPassword, t.real_name]
+        );
+        console.log(`Inserted extra teacher ${t.username} / 123456.`);
+      }
+    }
   }
 
   // 课程分类默认数据（与图示一致）
@@ -139,6 +178,101 @@ async function seed() {
     console.log("Inserted sample classic_volleyball_matches.");
   } else {
     console.log("classic_volleyball_matches already exist, skip seed.");
+  }
+
+  // 如果还没有技能队伍，则基于前 50 个学生自动创建若干个队伍，并为每位学生分配场上位置
+  const existingTeams = await query("SELECT id FROM student_teams LIMIT 1");
+  if (existingTeams.length === 0) {
+    const students = await query(
+      "SELECT id, real_name FROM students ORDER BY id ASC LIMIT 50"
+    );
+    if (students.length) {
+      const pattern = ["OH", "OH", "OPP", "MB", "MB", "S", "L"]; // 每队最多 7 人配置
+      let index = 0;
+      let teamIndex = 1;
+      while (index < students.length) {
+        const teamName = `训练小队${teamIndex}`;
+        const desc = "自动生成的排球训练小队";
+        const ownerId = students[index].id;
+        const result = await query(
+          "INSERT INTO student_teams (name, description, owner_student_id) VALUES (?, ?, ?)",
+          [teamName, desc, ownerId]
+        );
+        const teamId = result.insertId;
+
+        const members = [];
+        for (let i = 0; i < pattern.length && index < students.length; i++) {
+          const stu = students[index];
+          const courtPos = pattern[i];
+          const isCaptain = i === 0;
+          members.push({
+            teamId,
+            studentId: stu.id,
+            role: isCaptain ? "captain" : "member",
+            court_position: courtPos,
+          });
+          index += 1;
+        }
+
+        const valuePlaceholders = [];
+        const memberValues = [];
+        for (const m of members) {
+          valuePlaceholders.push("(?, ?, ?, ?, NOW())");
+          memberValues.push(
+            m.teamId,
+            m.studentId,
+            m.role,
+            m.court_position
+          );
+        }
+        if (valuePlaceholders.length) {
+          await query(
+            `INSERT INTO student_team_members (team_id, student_id, role, court_position, joined_at)
+             VALUES ${valuePlaceholders.join(",")}`,
+            memberValues
+          );
+        }
+        teamIndex += 1;
+      }
+      console.log(
+        `Created ${teamIndex - 1} teams and assigned positions for ${students.length} students.`
+      );
+    }
+  } else {
+    console.log("Student teams already exist, skip team seed.");
+  }
+
+  // 确保前 50 个学生至少参与一门课程
+  const students = await query(
+    "SELECT id FROM students ORDER BY id ASC LIMIT 50"
+  );
+  const courses = await query(
+    "SELECT id FROM courses ORDER BY id ASC"
+  );
+  if (students.length && courses.length) {
+    for (let i = 0; i < students.length; i++) {
+      const stuId = students[i].id;
+      const [cntRow] = await query(
+        "SELECT COUNT(*) AS cnt FROM course_enrollments WHERE student_id = ?",
+        [stuId]
+      );
+      if (cntRow.cnt > 0) continue;
+      const course = courses[i % courses.length];
+      await query(
+        `INSERT INTO course_enrollments
+           (course_id, student_id, status, enroll_pending, enroll_status, created_at, updated_at)
+         VALUES (?, ?, 'enrolled', 0, 'approved', NOW(), NOW())
+         ON DUPLICATE KEY UPDATE status = VALUES(status)`,
+        [course.id, stuId]
+      );
+      await query(
+        "UPDATE courses SET current_enrollment = current_enrollment + 1 WHERE id = ?",
+        [course.id]
+      );
+    }
+    console.log(
+      "Ensured first 50 students each have at least one course enrollment."
+    );
   }
 }
 

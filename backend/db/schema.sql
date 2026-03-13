@@ -216,3 +216,83 @@ CREATE TABLE IF NOT EXISTS classic_volleyball_matches (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='经典女排赛事';
 
+-- 学生排球技能档案（基础信息，如摸高等）
+CREATE TABLE IF NOT EXISTS student_skill_profiles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_id INT NOT NULL COMMENT '学生id',
+  base_reach_cm INT DEFAULT NULL COMMENT '摸高(cm)，首堂课录入',
+  notes VARCHAR(255) DEFAULT NULL COMMENT '其他备注',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_student_profile (student_id),
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生排球技能基础档案';
+
+-- 学生排球技能点（固定技能 + 自定义技能）
+CREATE TABLE IF NOT EXISTS student_skills (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  student_id INT NOT NULL COMMENT '学生id',
+  skill_code VARCHAR(64) NOT NULL COMMENT '技能编码，如 atk_line、def_pass_accuracy',
+  skill_name VARCHAR(64) NOT NULL COMMENT '技能名称，便于前端展示',
+  category ENUM('attack','set','defense','custom') NOT NULL COMMENT '技能类别：扣球/传球/防守/自定义',
+  value INT NOT NULL DEFAULT 0 COMMENT '当前技能点(0-100)',
+  max_value INT NOT NULL DEFAULT 100 COMMENT '最大技能点(用于前端进度条)',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_student_skill (student_id, skill_code),
+  INDEX idx_student_category (student_id, category),
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生排球技能点';
+
+-- 学生技能养成-队伍
+CREATE TABLE IF NOT EXISTS student_teams (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(64) NOT NULL COMMENT '队伍名称',
+  description VARCHAR(255) DEFAULT NULL COMMENT '队伍简介',
+  owner_student_id INT NOT NULL COMMENT '队长(创建者)学生id',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (owner_student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生技能养成队伍';
+
+-- 学生技能养成-队伍成员
+CREATE TABLE IF NOT EXISTS student_team_members (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  team_id INT NOT NULL COMMENT '队伍id',
+  student_id INT NOT NULL COMMENT '学生id',
+  role ENUM('captain','member') NOT NULL DEFAULT 'member' COMMENT '在队伍中的角色',
+  court_position ENUM('OH','OPP','MB','S','L') DEFAULT NULL COMMENT '场上位置：主攻OH/接应OPP/副攻MB/二传S/自由人L',
+  joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+  UNIQUE KEY uk_team_student (team_id, student_id),
+  UNIQUE KEY uk_student_single_team (student_id),
+  INDEX idx_team (team_id),
+  FOREIGN KEY (team_id) REFERENCES student_teams(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生技能养成队伍成员';
+
+-- 学生在线状态（最近活跃时间，用于“在线同学”展示）
+CREATE TABLE IF NOT EXISTS student_online_logs (
+  student_id INT PRIMARY KEY COMMENT '学生id',
+  last_active_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最近一次活跃时间',
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生技能小游戏在线状态';
+
+-- 学生队伍加入/退出申请（需老师端审核）
+CREATE TABLE IF NOT EXISTS student_team_requests (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  team_id INT NOT NULL COMMENT '队伍id',
+  student_id INT NOT NULL COMMENT '学生id',
+  type ENUM('join','leave') NOT NULL COMMENT '申请类型：加入/退出',
+  status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending' COMMENT '审核状态',
+  comment VARCHAR(255) DEFAULT NULL COMMENT '教师审核备注',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
+  handled_at DATETIME DEFAULT NULL COMMENT '处理时间',
+  handled_by_teacher_id INT DEFAULT NULL COMMENT '处理人(教师id)',
+  INDEX idx_team (team_id),
+  INDEX idx_student (student_id),
+  INDEX idx_status (status),
+  FOREIGN KEY (team_id) REFERENCES student_teams(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  FOREIGN KEY (handled_by_teacher_id) REFERENCES teachers(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生队伍加入/退出申请';
+
