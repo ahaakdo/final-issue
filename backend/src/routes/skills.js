@@ -347,6 +347,58 @@ skillsRouter.get(
 
 // ---------------- 老师端：查看 / 调整学生技能与队伍位置 ----------------
 
+// 老师端：获取学生列表（用于技能管理选择学生）
+skillsRouter.get(
+  "/teacher/students",
+  optionalAuth,
+  requireTeacher,
+  async (_req, res) => {
+    try {
+      const rows = await query(
+        "SELECT id, real_name, student_number, major FROM students ORDER BY id ASC"
+      );
+      res.json({ code: 0, data: rows || [] });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ code: 500, message: "获取学生列表失败" });
+    }
+  }
+);
+
+// 老师端：更新某学生基础档案（摸高、备注）
+skillsRouter.post(
+  "/teacher/students/:studentId/profile",
+  optionalAuth,
+  requireTeacher,
+  async (req, res) => {
+    try {
+      const studentId = Number(req.params.studentId);
+      if (!studentId) {
+        return res.status(400).json({ code: 400, message: "无效的学生ID" });
+      }
+      const { base_reach_cm, notes } = req.body || {};
+      await query(
+        `INSERT INTO student_skill_profiles (student_id, base_reach_cm, notes)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE base_reach_cm = VALUES(base_reach_cm), notes = VALUES(notes)`,
+        [
+          studentId,
+          base_reach_cm == null || base_reach_cm === "" ? null : Number(base_reach_cm),
+          notes || null,
+        ]
+      );
+      const [row] = await query(
+        "SELECT student_id, base_reach_cm, notes FROM student_skill_profiles WHERE student_id = ?",
+        [studentId]
+      );
+      res.json({ code: 0, message: "保存成功", data: row });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ code: 500, message: "保存基础档案失败" });
+    }
+  }
+);
+
 // 获取某个学生的技能档案与技能（老师端查看）
 skillsRouter.get(
   "/teacher/students/:studentId/skills",

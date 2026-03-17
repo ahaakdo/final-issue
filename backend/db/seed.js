@@ -12,16 +12,17 @@ async function seed() {
   const studentPassword = await hash("123456");
   const teacherPassword = await hash("123456");
 
-  // 学生示例：如果当前没有学生，则插入约 50 个学生账号，供组队与技能演示使用
-  const existingStudents = await query("SELECT id FROM students LIMIT 1");
-  if (existingStudents.length === 0) {
+  // 学生示例：确保至少有 50 个学生，不足则补充
+  const [studentCountRow] = await query("SELECT COUNT(*) AS cnt FROM students");
+  let studentCount = studentCountRow?.cnt ?? 0;
+  if (studentCount === 0) {
     const majors = ["体育教育", "运动训练", "社会体育", "排球专项"];
     const genders = [0, 1];
     const values = [];
     const rows = [];
     for (let i = 1; i <= 50; i++) {
       const username = `stu${i}`;
-      const studentNo = `2026${String(100 + i).slice(1)}`; // 简单生成一个 2026 开头的学号
+      const studentNo = `2026${String(100 + i).slice(1)}`;
       const realName = `学生${i}`;
       const email = `stu${i}@edu.cn`;
       const phone = `1380000${String(100 + i).slice(1)}`;
@@ -50,8 +51,52 @@ async function seed() {
         ${rows.join(",")}`;
     await query(sql, values);
     console.log("Inserted 50 students (stu1~stu50 / 123456).");
+    studentCount = 50;
+  } else if (studentCount < 50) {
+    const [maxIdRow] = await query("SELECT COALESCE(MAX(id), 0) AS mx FROM students");
+    const startId = maxIdRow?.mx ?? 0;
+    const existingUsernames = await query("SELECT username FROM students");
+    const nameSet = new Set(existingUsernames.map((r) => r.username));
+    const majors = ["体育教育", "运动训练", "社会体育", "排球专项"];
+    const genders = [0, 1];
+    const toAdd = 50 - studentCount;
+    const rows = [];
+    const values = [];
+    for (let i = 1; i <= toAdd; i++) {
+      const n = studentCount + i;
+      const username = `stu${n}`;
+      if (nameSet.has(username)) continue;
+      nameSet.add(username);
+      const studentNo = `2026${String(100 + n).slice(1)}`;
+      const realName = `学生${n}`;
+      const email = `stu${n}@edu.cn`;
+      const phone = `1380000${String(100 + n).slice(1)}`;
+      const major = majors[n % majors.length];
+      const gender = genders[n % 2];
+      const dorm = `${1 + (n % 4)}号楼${200 + n}室`;
+      rows.push("(?, ?, ?, ?, ?, ?, ?, ?, '2005-01-01', ?)");
+      values.push(
+        username,
+        studentPassword,
+        studentNo,
+        realName,
+        email,
+        phone,
+        major,
+        gender,
+        dorm
+      );
+    }
+    if (rows.length) {
+      await query(
+        `INSERT INTO students (username, password, student_number, real_name, email, phone, major, gender, birthday, dormitory) VALUES ${rows.join(",")}`,
+        values
+      );
+      console.log(`Inserted ${rows.length} more students to reach 50.`);
+    }
+    studentCount = 50;
   } else {
-    console.log("Students already exist, skip seed.");
+    console.log("Students already exist (>=50), skip student insert.");
   }
 
   // 教师示例
@@ -180,72 +225,111 @@ async function seed() {
     console.log("classic_volleyball_matches already exist, skip seed.");
   }
 
-  // 如果还没有技能队伍，则基于前 50 个学生自动创建若干个队伍，并为每位学生分配场上位置
-  const existingTeams = await query("SELECT id FROM student_teams LIMIT 1");
-  if (existingTeams.length === 0) {
-    const students = await query(
-      "SELECT id, real_name FROM students ORDER BY id ASC LIMIT 50"
-    );
-    if (students.length) {
-      const pattern = ["OH", "OH", "OPP", "MB", "MB", "S", "L"]; // 每队最多 7 人配置
-      let index = 0;
-      let teamIndex = 1;
-      while (index < students.length) {
-        const teamName = `训练小队${teamIndex}`;
-        const desc = "自动生成的排球训练小队";
-        const ownerId = students[index].id;
-        const result = await query(
-          "INSERT INTO student_teams (name, description, owner_student_id) VALUES (?, ?, ?)",
-          [teamName, desc, ownerId]
-        );
-        const teamId = result.insertId;
-
-        const members = [];
-        for (let i = 0; i < pattern.length && index < students.length; i++) {
-          const stu = students[index];
-          const courtPos = pattern[i];
-          const isCaptain = i === 0;
-          members.push({
-            teamId,
-            studentId: stu.id,
-            role: isCaptain ? "captain" : "member",
-            court_position: courtPos,
-          });
-          index += 1;
-        }
-
-        const valuePlaceholders = [];
-        const memberValues = [];
-        for (const m of members) {
-          valuePlaceholders.push("(?, ?, ?, ?, NOW())");
-          memberValues.push(
-            m.teamId,
-            m.studentId,
-            m.role,
-            m.court_position
-          );
-        }
-        if (valuePlaceholders.length) {
-          await query(
-            `INSERT INTO student_team_members (team_id, student_id, role, court_position, joined_at)
-             VALUES ${valuePlaceholders.join(",")}`,
-            memberValues
-          );
-        }
-        teamIndex += 1;
-      }
-      console.log(
-        `Created ${teamIndex - 1} teams and assigned positions for ${students.length} students.`
+  // 确保恰好 7 个训练小队，前 49 名学生入队（每队 7 人），第 50 名未入队可随时申请加入
+  const students = await query(
+    "SELECT id, real_name FROM students ORDER BY id ASC LIMIT 50"
+  );
+  const teamRows = await query("SELECT id FROM student_teams ORDER BY id ASC");
+  const needReseed = teamRows.length !== 7;
+  if (needReseed && students.length >= 49) {
+    await query("DELETE FROM student_team_members");
+    await query("DELETE FROM student_team_requests");
+    await query("DELETE FROM student_teams");
+    const pattern = ["OH", "OH", "OPP", "MB", "MB", "S", "L"];
+    for (let t = 0; t < 7; t++) {
+      const teamName = `训练小队${t + 1}`;
+      const ownerId = students[t * 7].id;
+      const result = await query(
+        "INSERT INTO student_teams (name, description, owner_student_id) VALUES (?, ?, ?)",
+        [teamName, "排球训练小队", ownerId]
       );
+      const teamId = result.insertId;
+      const valuePlaceholders = [];
+      const memberValues = [];
+      for (let i = 0; i < 7; i++) {
+        const stu = students[t * 7 + i];
+        if (!stu) break;
+        valuePlaceholders.push("(?, ?, ?, ?, NOW())");
+        memberValues.push(
+          teamId,
+          stu.id,
+          i === 0 ? "captain" : "member",
+          pattern[i]
+        );
+      }
+      if (valuePlaceholders.length) {
+        await query(
+          `INSERT INTO student_team_members (team_id, student_id, role, court_position, joined_at) VALUES ${valuePlaceholders.join(",")}`,
+          memberValues
+        );
+      }
     }
-  } else {
-    console.log("Student teams already exist, skip team seed.");
+    console.log("Ensured exactly 7 squads; 49 students in squads, 1 free to join.");
+  } else if (!needReseed) {
+    console.log("Student teams already 7, skip team seed.");
   }
 
-  // 确保前 50 个学生至少参与一门课程
-  const students = await query(
-    "SELECT id FROM students ORDER BY id ASC LIMIT 50"
+  // 为前 50 名学生初始化技能并随机分配技能点，保证随时可加入小队（已有 7 队且多数已在队内）
+  const ALL_FIXED_SKILLS = [
+    { code: "atk_line", name: "直线扣球", category: "attack" },
+    { code: "atk_small_diagonal", name: "小斜线扣球", category: "attack" },
+    { code: "atk_waist_line", name: "腰线扣球", category: "attack" },
+    { code: "atk_big_diagonal", name: "大斜线扣球", category: "attack" },
+    { code: "set_flat", name: "平拉开", category: "set" },
+    { code: "set_quick", name: "快攻", category: "set" },
+    { code: "set_back_quick", name: "背快", category: "set" },
+    { code: "set_chase_in", name: "冲进", category: "set" },
+    { code: "set_short", name: "短球", category: "set" },
+    { code: "set_gap", name: "加塞", category: "set" },
+    { code: "set_back_fly", name: "背飞", category: "set" },
+    { code: "set_two_back", name: "后二", category: "set" },
+    { code: "def_pass_accuracy", name: "一传到位率", category: "defense" },
+    { code: "def_ball_quality", name: "起球质量", category: "defense" },
+    { code: "def_positioning", name: "卡位意识", category: "defense" },
+    { code: "def_heavy_spike", name: "防重扣", category: "defense" },
+    { code: "def_tipping", name: "防吊球", category: "defense" },
+    { code: "def_tip_over", name: "防探头", category: "defense" },
+    { code: "def_dig", name: "救球能力", category: "defense" },
+    { code: "def_coverage", name: "防守覆盖范围", category: "defense" },
+  ];
+  const studentIds = students.map((s) => s.id);
+  for (const sid of studentIds) {
+    const [cnt] = await query(
+      "SELECT COUNT(*) AS cnt FROM student_skills WHERE student_id = ?",
+      [sid]
+    );
+    if (cnt.cnt === 0) {
+      const values = [];
+      const placeholders = ALL_FIXED_SKILLS.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+      for (const s of ALL_FIXED_SKILLS) {
+        values.push(sid, s.code, s.name, s.category, 0, 100);
+      }
+      await query(
+        `INSERT INTO student_skills (student_id, skill_code, skill_name, category, value, max_value) VALUES ${placeholders}`,
+        values
+      );
+    }
+    const ids = await query(
+      "SELECT id FROM student_skills WHERE student_id = ?",
+      [sid]
+    );
+    for (const row of ids) {
+      const val = Math.floor(Math.random() * 101);
+      await query("UPDATE student_skills SET value = ? WHERE id = ?", [val, row.id]);
+    }
+    const reach = 240 + Math.floor(Math.random() * 41);
+    await query(
+      `INSERT INTO student_skill_profiles (student_id, base_reach_cm, notes)
+       VALUES (?, ?, NULL)
+       ON DUPLICATE KEY UPDATE base_reach_cm = VALUES(base_reach_cm)`,
+      [sid, reach]
+    );
+  }
+  console.log(
+    "Ensured 50 students have skill profiles and random skill values (0-100)."
   );
+
+  // 确保前 50 个学生至少参与一门课程（复用上面的 students 列表）
   const courses = await query(
     "SELECT id FROM courses ORDER BY id ASC"
   );
