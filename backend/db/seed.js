@@ -12,6 +12,47 @@ async function seed() {
   const studentPassword = await hash("123456");
   const teacherPassword = await hash("123456");
 
+  const studentNames = [
+    "李明","王磊","张强","刘洋","陈浩","赵俊","黄凯","周航","吴凡","徐晨",
+    "孙宇","马超","朱鹏","胡杰","郭亮","何鑫","高阳","林涛","罗毅","郑峰",
+    "杨帆","唐伟","宋博","谢飞","韩旭","许睿","邓辉","彭宇","蒋昊","卢森",
+    "曹瑞","丁一","邱泽","苏航","叶凯","潘俊","冯杰","董浩","余晨","方磊",
+    "金昊","石磊","田宇","段飞","白宇","任航","钟凯","崔俊","邹阳","严浩",
+  ];
+
+  const courseNamePool = [
+    "扣球动作入门与节奏训练",
+    "直线扣球专项提高",
+    "斜线扣球与线路变化",
+    "腰线扣球与落点控制",
+    "快攻扣球与起跳时机",
+    "二传手型与指力训练",
+    "平拉开传球与配合",
+    "背快与战术分配训练",
+    "冲进与短球配合训练",
+    "后二与背飞进阶",
+    "一传基础与站位训练",
+    "一传到位率强化训练",
+    "防守移动与卡位意识",
+    "防重扣与起球质量训练",
+    "防吊球与探头球处理",
+    "后排防守覆盖范围训练",
+    "自由人一传防守专项",
+    "拦网手型与起跳训练",
+    "双人拦网配合训练",
+    "拦防体系与转换训练",
+    "上手发球动作精修",
+    "跳发球力量与稳定性",
+    "发球落点与战术发球",
+    "接发球站位与应对",
+    "发接发对抗与实战",
+    "攻防转换与快速反击",
+    "小球处理与串联训练",
+    "团队配合与战术演练",
+    "分组对抗与轮转训练",
+    "赛前热身与运动防护",
+  ];
+
   // 学生示例：确保至少有 50 个学生，不足则补充
   const [studentCountRow] = await query("SELECT COUNT(*) AS cnt FROM students");
   let studentCount = studentCountRow?.cnt ?? 0;
@@ -23,7 +64,7 @@ async function seed() {
     for (let i = 1; i <= 50; i++) {
       const username = `stu${i}`;
       const studentNo = `2026${String(100 + i).slice(1)}`;
-      const realName = `学生${i}`;
+      const realName = studentNames[i - 1] || `学生${i}`;
       const email = `stu${i}@edu.cn`;
       const phone = `1380000${String(100 + i).slice(1)}`;
       const major = majors[i % majors.length];
@@ -68,7 +109,7 @@ async function seed() {
       if (nameSet.has(username)) continue;
       nameSet.add(username);
       const studentNo = `2026${String(100 + n).slice(1)}`;
-      const realName = `学生${n}`;
+      const realName = studentNames[n - 1] || `学生${n}`;
       const email = `stu${n}@edu.cn`;
       const phone = `1380000${String(100 + n).slice(1)}`;
       const major = majors[n % majors.length];
@@ -114,25 +155,24 @@ async function seed() {
     console.log("Inserted 2 teachers (teacher1, teacher2 / 123456).");
   } else {
     console.log("Teachers already exist, skip base teacher seed.");
-    // 额外确保 teacher3/teacher4/teacher5 存在
-    const extraTeachers = [
-      { username: "teacher3", real_name: "王老师" },
-      { username: "teacher4", real_name: "张老师" },
-      { username: "teacher5", real_name: "李老师" },
-    ];
-    for (const t of extraTeachers) {
-      const rows = await query(
-        "SELECT id FROM teachers WHERE username = ?",
-        [t.username]
+  }
+
+  // 额外确保 teacher3/teacher4 存在（按需求）
+  const extraTeachers = [
+    { username: "teacher3", real_name: "teacher3" },
+    { username: "teacher4", real_name: "teacher4" },
+  ];
+  for (const t of extraTeachers) {
+    const rows = await query("SELECT id FROM teachers WHERE username = ?", [
+      t.username,
+    ]);
+    if (!rows.length) {
+      await query(
+        `INSERT INTO teachers (username, password, real_name, major, gender)
+         VALUES (?, ?, ?, '排球', 1)`,
+        [t.username, teacherPassword, t.real_name]
       );
-      if (!rows.length) {
-        await query(
-          `INSERT INTO teachers (username, password, real_name, major, gender)
-           VALUES (?, ?, ?, '排球', 1)`,
-          [t.username, teacherPassword, t.real_name]
-        );
-        console.log(`Inserted extra teacher ${t.username} / 123456.`);
-      }
+      console.log(`Inserted extra teacher ${t.username} / 123456.`);
     }
   }
 
@@ -144,7 +184,8 @@ async function seed() {
        ('扣球训练', '专注扣球发力、起跳时机与击球点控'),
        ('接球训练', '包含垫球姿势、一传稳定性训练'),
        ('发球训练', '涵盖上手发球、跳发球及发球落点控'),
-       ('传球训练', '专注二传手手指力量及精准度训练')`
+       ('传球训练', '专注二传手手指力量及精准度训练'),
+       ('防守训练', '防守移动、卡位意识与后排起球训练')`
     );
     console.log("Inserted 4 course categories.");
   } else {
@@ -152,30 +193,83 @@ async function seed() {
   }
 
   // 课程示例（需先有教师和分类）
-  const existingCourses = await query("SELECT id FROM courses LIMIT 1");
-  if (existingCourses.length === 0) {
-    const teachers = await query("SELECT id FROM teachers ORDER BY id LIMIT 2");
-    if (teachers.length >= 2) {
-      const t1 = teachers[0].id;
-      const t2 = teachers[1].id;
+  const [courseCntRow] = await query("SELECT COUNT(*) AS cnt FROM courses");
+  const courseCount = Number(courseCntRow?.cnt ?? 0) || 0;
+  if (courseCount < 30) {
+    const teachers = await query("SELECT id FROM teachers ORDER BY id ASC");
+    const categories = await query("SELECT id, name FROM course_categories ORDER BY id ASC");
+    if (teachers.length && categories.length) {
+      const schedules = [
+        "周一 10:00",
+        "周一 14:00",
+        "周二 14:00",
+        "周二 16:00",
+        "周三 10:00",
+        "周三 16:00",
+        "周四 14:00",
+        "周四 15:30",
+        "周五 09:00",
+        "周六 10:00",
+      ];
+      const locations = ["体育馆A馆", "体育馆B馆", "体育馆训练场"];
+      const need = 30 - courseCount;
+      const rows = [];
+      const values = [];
+      for (let i = 0; i < need; i++) {
+        const idx = courseCount + i + 1;
+        const t = teachers[idx % teachers.length].id;
+        const cat = categories[idx % categories.length].id;
+        const schedule = schedules[idx % schedules.length];
+        const name = courseNamePool[(idx - 1) % courseNamePool.length] + `（${idx}）`;
+        const credits = 1.5;
+        const capacity = 15;
+        const current = 0;
+        const location = locations[idx % locations.length];
+        const enrollStart = "2026-03-01";
+        const enrollEnd = "2026-03-30";
+        const start = "2026-04-01";
+        const end = "2026-06-30";
+        const description = "系统自动补充的训练课程";
+        const tags = "训练,排球";
+        const requirements = "无";
+        const syllabus = "基础训练与实战配合";
+        const difficulty = (idx % 3) + 1;
+        const lessonCount = 12 + (idx % 6);
+        const recommend = 4.2;
+        const visible = 1;
+        rows.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        values.push(
+          name,
+          credits,
+          capacity,
+          current,
+          location,
+          schedule,
+          enrollStart,
+          enrollEnd,
+          start,
+          end,
+          description,
+          tags,
+          requirements,
+          syllabus,
+          difficulty,
+          lessonCount,
+          recommend,
+          visible,
+          t,
+          cat
+        );
+      }
       await query(
-        `INSERT INTO courses (name, credits, capacity, current_enrollment, location, schedule_weekly, enroll_start_date, enroll_end_date, start_date, end_date, description, tags, requirements, syllabus, difficulty, lesson_count, recommend_index, is_visible, teacher_id, category_id) VALUES
-         ('扣球基础入门', 1.5, 15, 3, '体育馆A馆', '周二 14:00', '2026-03-01', '2026-03-20', '2026-03-25', '2026-06-20', '零基础扣球动作与起跳节奏', '基础,入门', '无', '1.挥臂 2.起跳 3.击球点', 1, 12, 4.5, 1, ?, 1),
-         ('强力扣球进阶', 2, 12, 5, '体育馆A馆', '周四 15:30', '2026-03-01', '2026-03-25', '2026-04-01', '2026-06-30', '提升扣球力量与线路变化', '高强度,技术流', '需完成扣球基础', '1.力量 2.线路 3.战术', 2, 16, 4.8, 1, ?, 1),
-         ('一传稳定性训练', 1.5, 18, 8, '体育馆B馆', '周一 10:00', '2026-03-05', '2026-03-28', '2026-04-05', '2026-06-15', '垫球与一传到位率训练', '基础', '无', '1.垫球 2.一传 3.配合', 1, 14, 4.2, 1, ?, 2),
-         ('接发球战术', 2, 10, 2, '体育馆B馆', '周三 16:00', '2026-03-01', '2026-03-30', '2026-04-06', '2026-07-01', '接发球站位与战术应用', '技术流', '有一传基础', '1.站位 2.判断 3.战术', 2, 18, 4.6, 1, ?, 2),
-         ('上手发球精修', 1, 20, 12, '体育馆A馆', '周五 09:00', '2026-03-01', '2026-03-15', '2026-03-20', '2026-05-31', '上手发球动作与稳定性', '入门', '无', '1.抛球 2.挥臂 3.落点', 1, 10, 4.0, 1, ?, 3),
-         ('大力跳发训练', 2, 8, 0, '体育馆A馆', '周一 14:00', '2026-03-06', '2026-03-25', '2026-03-30', '2026-06-30', '跳发球技术与力量训练', '高强度', '有上手发球基础', '1.助跑 2.起跳 3.击球', 3, 16, 4.9, 1, ?, 3),
-         ('二传手基础', 1.5, 12, 4, '体育馆A馆', '周二 16:00', '2026-03-01', '2026-03-22', '2026-03-28', '2026-06-25', '二传手指法与分配球', '基础,技术流', '无', '1.手型 2.分配 3.节奏', 1, 14, 4.3, 1, ?, 4),
-         ('传球与战术组织', 2, 10, 6, '体育馆A馆', '周四 14:00', '2026-03-05', '2026-03-28', '2026-04-02', '2026-06-28', '组织进攻与快攻配合', '技术流', '有二传基础', '1.快攻 2.平拉开 3.战术', 2, 16, 4.7, 1, ?, 4),
-         ('发球与接发综合', 2, 15, 7, '体育馆B馆', '周六 10:00', '2026-03-01', '2026-03-25', '2026-04-01', '2026-06-30', '发接发对抗与实战', '高强度', '有发球和接球基础', '综合对抗', 2, 12, 4.5, 1, ?, 3),
-         ('拦网入门', 1, 16, 5, '体育馆B馆', '周三 10:00', '2026-03-01', '2026-03-20', '2026-03-25', '2026-05-20', '拦网起跳与手型', '入门', '无', '1.起跳 2.手型 3.时机', 1, 8, 4.1, 1, ?, 1)`,
-        [t1, t1, t1, t1, t2, t2, t2, t2, t2, t1]
+        `INSERT INTO courses (name, credits, capacity, current_enrollment, location, schedule_weekly, enroll_start_date, enroll_end_date, start_date, end_date, description, tags, requirements, syllabus, difficulty, lesson_count, recommend_index, is_visible, teacher_id, category_id)
+         VALUES ${rows.join(",")}`,
+        values
       );
-      console.log("Inserted 10 sample courses.");
+      console.log(`Inserted ${need} courses to reach 30.`);
     }
   } else {
-    console.log("Courses already exist, skip seed.");
+    console.log("Courses already >= 30, skip top-up.");
   }
 
   // 女排专栏示例数据

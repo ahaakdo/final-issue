@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS course_enrollments (
   enroll_pending TINYINT NOT NULL DEFAULT 1 COMMENT '报名是否审核中',
   enroll_status ENUM('approved','reject') DEFAULT NULL COMMENT '报名审核结果',
   enroll_reason VARCHAR(500) DEFAULT NULL COMMENT '报名理由(可选)',
+  enroll_form TEXT DEFAULT NULL COMMENT '报名申请表(JSON字符串)',
   withdraw_pending TINYINT NOT NULL DEFAULT 0 COMMENT '是否审核中(退课申请)',
   withdraw_status ENUM('approved','reject') DEFAULT NULL COMMENT '退课状态',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '报名时间',

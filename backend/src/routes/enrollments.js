@@ -4,6 +4,45 @@ import { optionalAuth, requireStudent, requireTeacher } from "../middleware/auth
 
 export const enrollmentsRouter = Router();
 
+function parseWeeklySchedule(input) {
+  if (!input || typeof input !== "string") return null;
+  const s = input.trim();
+  const m = s.match(/^(周[一二三四五六日天])\s*(\d{1,2}:\d{2})/);
+  if (!m) return null;
+  return { day: m[1], time: m[2] };
+}
+
+async function detectScheduleConflict(studentId, targetCourseId) {
+  const [target] = await query(
+    "SELECT id, name, schedule_weekly FROM courses WHERE id = ?",
+    [targetCourseId]
+  );
+  if (!target?.schedule_weekly) return null;
+  const t = parseWeeklySchedule(target.schedule_weekly);
+  if (!t) return null;
+
+  const rows = await query(
+    `SELECT c.id, c.name, c.schedule_weekly
+     FROM course_enrollments e
+     JOIN courses c ON c.id = e.course_id
+     WHERE e.student_id = ?
+       AND e.course_id <> ?
+       AND (
+         e.status = 'enrolled'
+         OR (e.status = 'pending' AND e.enroll_pending = 1)
+       )`,
+    [studentId, targetCourseId]
+  );
+  for (const r of rows) {
+    const p = parseWeeklySchedule(r.schedule_weekly);
+    if (!p) continue;
+    if (p.day === t.day && p.time === t.time) {
+      return { target, conflict: r };
+    }
+  }
+  return null;
+}
+
 // -------- 老师端：课程报名名单 / 考勤 / 成绩 / 私聊 --------
 
 // 报名名单（仅老师，包含已通过与审核中）
@@ -27,16 +66,27 @@ enrollmentsRouter.get(
       }
       const rows = await query(
         `SELECT e.id, e.student_id, e.status,
-                e.enroll_pending, e.enroll_status, e.enroll_reason, e.enroll_reject_reason,
+                e.enroll_pending, e.enroll_status, e.enroll_reason, e.enroll_form, e.enroll_reject_reason,
                 e.withdraw_pending, e.withdraw_status,
                 s.real_name AS student_name,
                 s.student_number,
                 s.major,
                 s.gender,
+                s.email,
+                s.phone,
+                s.dormitory,
+                p.base_reach_cm,
+                AVG(CASE WHEN sk.category = 'attack' THEN sk.value END) AS atk_avg,
+                AVG(CASE WHEN sk.category = 'set' THEN sk.value END) AS set_avg,
+                AVG(CASE WHEN sk.category = 'defense' THEN sk.value END) AS def_avg,
                 e.created_at
          FROM course_enrollments e
          JOIN students s ON e.student_id = s.id
+         LEFT JOIN student_skill_profiles p ON p.student_id = s.id
+         LEFT JOIN student_skills sk ON sk.student_id = s.id
          WHERE e.course_id = ?
+         GROUP BY e.id, e.student_id, e.status, e.enroll_pending, e.enroll_status, e.enroll_reason, e.enroll_form, e.enroll_reject_reason,
+                  e.withdraw_pending, e.withdraw_status, s.real_name, s.student_number, s.major, s.gender, s.email, s.phone, s.dormitory, p.base_reach_cm, e.created_at
          ORDER BY e.created_at ASC`,
         [courseId]
       );
@@ -712,16 +762,23 @@ enrollmentsRouter.post("/courses/:courseId/enroll", optionalAuth, requireStudent
     const courseId = Number(req.params.courseId);
     const studentId = req.auth.userId;
     const enrollReason = req.body?.reason != null ? String(req.body.reason).trim() : null;
+    const enrollForm = req.body?.form != null ? req.body.form : null;
     if (!courseId || courseId < 1) {
       return res.status(400).json({ code: 400, message: "无效的课程id" });
     }
     if (enrollReason && enrollReason.length > 500) {
       return res.status(400).json({ code: 400, message: "报名理由最多 500 字" });
     }
+    if (enrollForm != null) {
+      const str = JSON.stringify(enrollForm);
+      if (str.length > 4000) {
+        return res.status(400).json({ code: 400, message: "申请表内容过长" });
+      }
+    }
 
     const [course] = await query(
       `SELECT id, name, capacity, current_enrollment, is_visible,
-              enroll_start_date, enroll_end_date
+              enroll_start_date, enroll_end_date, schedule_weekly
        FROM courses WHERE id = ?`,
       [courseId]
     );
@@ -746,6 +803,14 @@ enrollmentsRouter.post("/courses/:courseId/enroll", optionalAuth, requireStudent
       }
     }
 
+    const conflict = await detectScheduleConflict(studentId, courseId);
+    if (conflict) {
+      return res.status(400).json({
+        code: 400,
+        message: `课程时间冲突：已选「${conflict.conflict.name}」与当前课程同一时间`,
+      });
+    }
+
     const existing = await query(
       "SELECT id, status, enroll_pending FROM course_enrollments WHERE course_id = ? AND student_id = ?",
       [courseId, studentId]
@@ -766,16 +831,17 @@ enrollmentsRouter.post("/courses/:courseId/enroll", optionalAuth, requireStudent
              enroll_pending = 1,
              enroll_status = 'reject',
              enroll_reason = ?,
+             enroll_form = ?,
              updated_at = NOW()
          WHERE id = ?`,
-        [enrollReason, existing[0].id]
+        [enrollReason, enrollForm ? JSON.stringify(enrollForm) : null, existing[0].id]
       );
     } else {
       await query(
         `INSERT INTO course_enrollments
-          (course_id, student_id, status, enroll_pending, enroll_status, enroll_reason, withdraw_pending, withdraw_status)
-         VALUES (?, ?, 'pending', 1, 'reject', ?, 0, NULL)`,
-        [courseId, studentId, enrollReason]
+          (course_id, student_id, status, enroll_pending, enroll_status, enroll_reason, enroll_form, withdraw_pending, withdraw_status)
+         VALUES (?, ?, 'pending', 1, 'reject', ?, ?, 0, NULL)`,
+        [courseId, studentId, enrollReason, enrollForm ? JSON.stringify(enrollForm) : null]
       );
     }
 
@@ -953,13 +1019,23 @@ enrollmentsRouter.get("/teacher/enroll-requests", optionalAuth, requireTeacher, 
       where += " AND e.status = 'pending' AND e.enroll_pending = 1";
     }
     const rows = await query(
-      `SELECT e.id, e.course_id, e.student_id, e.status, e.enroll_pending, e.enroll_status, e.enroll_reason, e.created_at,
+      `SELECT e.id, e.course_id, e.student_id, e.status, e.enroll_pending, e.enroll_status, e.enroll_reason, e.enroll_form, e.created_at,
               c.name AS course_name,
-              s.real_name AS student_name, s.student_number
+              c.schedule_weekly,
+              s.real_name AS student_name, s.student_number, s.major, s.gender, s.email, s.phone, s.dormitory,
+              p.base_reach_cm,
+              AVG(CASE WHEN sk.category = 'attack' THEN sk.value END) AS atk_avg,
+              AVG(CASE WHEN sk.category = 'set' THEN sk.value END) AS set_avg,
+              AVG(CASE WHEN sk.category = 'defense' THEN sk.value END) AS def_avg
        FROM course_enrollments e
        JOIN courses c ON e.course_id = c.id
        JOIN students s ON e.student_id = s.id
+       LEFT JOIN student_skill_profiles p ON p.student_id = s.id
+       LEFT JOIN student_skills sk ON sk.student_id = s.id
        WHERE ${where}
+       GROUP BY e.id, e.course_id, e.student_id, e.status, e.enroll_pending, e.enroll_status, e.enroll_reason, e.enroll_form, e.created_at,
+                c.name, c.schedule_weekly,
+                s.real_name, s.student_number, s.major, s.gender, s.email, s.phone, s.dormitory, p.base_reach_cm
        ORDER BY e.created_at DESC`,
       params
     );
@@ -967,6 +1043,46 @@ enrollmentsRouter.get("/teacher/enroll-requests", optionalAuth, requireTeacher, 
   } catch (e) {
     console.error(e);
     res.status(500).json({ code: 500, message: "获取报名申请失败" });
+  }
+});
+
+// 教师查看某条报名申请详情（含学生技能明细与档案）
+enrollmentsRouter.get("/teacher/enroll-requests/:id", optionalAuth, requireTeacher, async (req, res) => {
+  try {
+    const teacherId = req.auth.userId;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ code: 400, message: "无效的申请ID" });
+    const [row] = await query(
+      `SELECT e.id, e.course_id, e.student_id, e.status, e.enroll_pending, e.enroll_status, e.enroll_reason, e.enroll_form, e.created_at,
+              c.name AS course_name, c.schedule_weekly, c.teacher_id,
+              s.real_name AS student_name, s.student_number, s.major, s.gender, s.email, s.phone, s.dormitory
+       FROM course_enrollments e
+       JOIN courses c ON c.id = e.course_id
+       JOIN students s ON s.id = e.student_id
+       WHERE e.id = ?`,
+      [id]
+    );
+    if (!row) return res.status(404).json({ code: 404, message: "申请不存在" });
+    if (row.teacher_id !== teacherId) return res.status(403).json({ code: 403, message: "无权限" });
+    const [profile] = await query(
+      "SELECT student_id, base_reach_cm, notes FROM student_skill_profiles WHERE student_id = ?",
+      [row.student_id]
+    );
+    const skills = await query(
+      "SELECT skill_code, skill_name, category, value, max_value FROM student_skills WHERE student_id = ? ORDER BY category, id",
+      [row.student_id]
+    );
+    res.json({
+      code: 0,
+      data: {
+        enrollment: row,
+        profile: profile || null,
+        skills,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ code: 500, message: "获取申请详情失败" });
   }
 });
 
@@ -997,6 +1113,13 @@ enrollmentsRouter.post("/teacher/enroll-requests/:id/approve", optionalAuth, req
     if (row.teacher_id !== teacherId) return res.status(403).json({ code: 403, message: "无权限" });
     if (row.status !== "pending" || !row.enroll_pending) {
       return res.status(400).json({ code: 400, message: "该申请不在审核中" });
+    }
+    const conflict = await detectScheduleConflict(row.student_id, row.course_id);
+    if (conflict) {
+      return res.status(400).json({
+        code: 400,
+        message: `无法通过：学生课程时间冲突（已选「${conflict.conflict.name}」）`,
+      });
     }
     const current = await recomputeCourseEnrollment(row.course_id);
     if (row.capacity > 0 && current >= row.capacity) {
