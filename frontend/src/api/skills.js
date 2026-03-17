@@ -10,6 +10,15 @@ export function getTeamOverview() {
   return http.get("/student/teams/overview");
 }
 
+// 学生端：发起加入/退出申请（需教师审批）
+export function requestJoinTeam(teamId) {
+  return http.post(`/student/teams/${teamId}/join-request`);
+}
+
+export function requestLeaveTeam() {
+  return http.post("/student/teams/leave-request");
+}
+
 // 老师端：学生列表（用于技能管理）
 export function getStudentListForTeacher() {
   return http.get("/teacher/students");

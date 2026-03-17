@@ -378,7 +378,7 @@
 defineOptions({ name: "CourseList" });
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { Search, Grid, List, User, Clock, Location, Star, Collection, InfoFilled, Document, UserFilled, Calendar, Reading, ChatDotRound } from "@element-plus/icons-vue";
 import { formatDate, formatDateRange } from "@/utils/format";
 import { getCourseList } from "@/api/course";
@@ -412,6 +412,14 @@ const cancelEnrollLoading = ref(false);
 const enrollment = ref(null);
 const hasStarted = ref(false);
 const isEnrolled = computed(() => enrollment.value?.status === "enrolled");
+
+const enrollForm = ref({
+  reason: "",
+  goal: "",
+  experience: "",
+  health: "",
+  contact: "",
+});
 
 function toDateOnly(input) {
   if (!input) return null;
@@ -463,10 +471,51 @@ function goWithdrawApply() {
 
 async function onEnrollCourse() {
   if (!currentCourse.value?.id) return;
+  const { value, action } = await ElMessageBox.confirm(
+    "提交报名申请前需要填写申请表（可简填）",
+    "报名申请",
+    { type: "info", confirmButtonText: "去填写", cancelButtonText: "取消" }
+  )
+    .then(() => ({ action: "confirm", value: true }))
+    .catch(() => ({ action: "cancel", value: false }));
+  if (action !== "confirm") return;
+
+  const formOk = await ElMessageBox.prompt("请填写报名理由（必填，最多500字）", "申请表", {
+    inputType: "textarea",
+    inputPlaceholder: "例如：想提升扣球能力，配合校队训练",
+    inputValidator: (val) => {
+      if (!val || !val.trim()) return "报名理由必填";
+      if (val.trim().length > 500) return "报名理由最多500字";
+      return true;
+    },
+    confirmButtonText: "下一步",
+    cancelButtonText: "取消",
+  }).catch(() => null);
+  if (!formOk?.value) return;
+
+  enrollForm.value.reason = String(formOk.value).trim();
+
+  // 其余项可选
+  const opt = await ElMessageBox.prompt("可选：训练目标（可留空，最多200字）", "申请表", {
+    inputType: "textarea",
+    inputPlaceholder: "例如：一传到位率提升到80%",
+    confirmButtonText: "提交",
+    cancelButtonText: "跳过并提交",
+    inputValidator: (val) => {
+      if (!val) return true;
+      if (String(val).trim().length > 200) return "最多200字";
+      return true;
+    },
+  }).catch(() => ({ value: "", action: "skip" }));
+  enrollForm.value.goal = opt?.value ? String(opt.value).trim() : "";
+
   enrollLoading.value = true;
   try {
-    await enrollCourse(currentCourse.value.id);
-    ElMessage.success("报名成功");
+    await enrollCourse(currentCourse.value.id, {
+      reason: enrollForm.value.reason,
+      form: enrollForm.value,
+    });
+    ElMessage.success("已提交报名申请");
     fetchList();
     await refreshEnrollmentStatus();
   } catch (e) {

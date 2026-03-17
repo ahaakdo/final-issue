@@ -33,14 +33,17 @@
             <el-table-column prop="course_name" label="课程" min-width="160" show-overflow-tooltip />
             <el-table-column prop="student_name" label="学生" width="110" show-overflow-tooltip />
             <el-table-column prop="student_number" label="学号" width="120" show-overflow-tooltip />
-            <el-table-column label="理由" min-width="160" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.enroll_reason || "—" }}</template>
+            <el-table-column label="技能概览" width="140" align="center">
+              <template #default="{ row }">
+                <span>攻{{ formatAvg(row.atk_avg) }} 传{{ formatAvg(row.set_avg) }} 防{{ formatAvg(row.def_avg) }}</span>
+              </template>
             </el-table-column>
             <el-table-column label="申请时间" width="160">
               <template #default="{ row }">{{ formatRelativeTime(row.created_at) }}</template>
             </el-table-column>
             <el-table-column label="操作" width="160" fixed="right" align="center">
               <template #default="{ row }">
+                <el-button type="primary" link @click="openEnrollDetail(row)">详情</el-button>
                 <el-button type="success" link :loading="actionLoadingId === 'enroll:' + row.id" @click="onApproveEnroll(row)">通过</el-button>
                 <el-button type="danger" link :loading="actionLoadingId === 'enroll:' + row.id" @click="onRejectEnroll(row)">驳回</el-button>
               </template>
@@ -115,6 +118,29 @@
         </el-tab-pane>
       </el-tabs>
     </section>
+
+    <el-drawer v-model="detailVisible" title="报名申请详情" size="520px" destroy-on-close>
+      <div v-loading="detailLoading">
+        <el-descriptions v-if="detailData" :column="1" border size="small">
+          <el-descriptions-item label="课程">{{ detailData.enrollment.course_name }}</el-descriptions-item>
+          <el-descriptions-item label="时间">{{ detailData.enrollment.schedule_weekly || "—" }}</el-descriptions-item>
+          <el-descriptions-item label="学生">{{ detailData.enrollment.student_name }} {{ detailData.enrollment.student_number }}</el-descriptions-item>
+          <el-descriptions-item label="专业">{{ detailData.enrollment.major || "—" }}</el-descriptions-item>
+          <el-descriptions-item label="联系方式">{{ detailData.enrollment.phone || detailData.enrollment.email || "—" }}</el-descriptions-item>
+          <el-descriptions-item label="摸高">{{ detailData.profile?.base_reach_cm ?? "—" }}</el-descriptions-item>
+          <el-descriptions-item label="报名理由">{{ detailData.enrollment.enroll_reason || "—" }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div v-if="detailSkills.length" style="margin-top: 12px;">
+          <el-divider content-position="left">技能点</el-divider>
+          <el-table :data="detailSkills" border size="small" height="320">
+            <el-table-column prop="category" label="分类" width="90" />
+            <el-table-column prop="skill_name" label="技能" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="value" label="点数" width="80" align="center" />
+          </el-table>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -125,6 +151,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { formatRelativeTime } from "@/utils/format";
 import {
   getTeacherEnrollRequests,
+  getTeacherEnrollRequestDetail,
   approveEnrollRequest,
   rejectEnrollRequest,
   getTeacherWithdrawRequests,
@@ -142,9 +169,18 @@ const historyLoading = ref(false);
 const historyList = ref([]);
 const historyType = ref("");
 const historyResult = ref("");
+const detailVisible = ref(false);
+const detailLoading = ref(false);
+const detailData = ref(null);
+const detailSkills = ref([]);
 
 const enrollPendingCount = computed(() => enrollRequests.value.length);
 const withdrawPendingCount = computed(() => withdrawRequests.value.length);
+
+function formatAvg(v) {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  return Number(v).toFixed(0);
+}
 
 async function refresh() {
   loading.value = true;
@@ -157,6 +193,21 @@ async function refresh() {
     withdrawRequests.value = Array.isArray(withdraw) ? withdraw : [];
   } finally {
     loading.value = false;
+  }
+}
+
+async function openEnrollDetail(row) {
+  detailVisible.value = true;
+  detailLoading.value = true;
+  detailData.value = null;
+  detailSkills.value = [];
+  try {
+    const res = await getTeacherEnrollRequestDetail(row.id);
+    const data = res?.data ?? res;
+    detailData.value = data;
+    detailSkills.value = Array.isArray(data.skills) ? data.skills : [];
+  } finally {
+    detailLoading.value = false;
   }
 }
 

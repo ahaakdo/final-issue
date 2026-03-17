@@ -7,6 +7,7 @@ import { createPinia } from "pinia";
 import router from "./router";
 import "./style/reset.scss";
 import "./style/variables.scss";
+import "./style/background.scss";
 
 const app = createApp(App);
 const pinia = createPinia();

@@ -5,6 +5,10 @@ export function getTeacherEnrollRequests(params = {}) {
   return http.get("/teacher/enroll-requests", { params });
 }
 
+export function getTeacherEnrollRequestDetail(id) {
+  return http.get(`/teacher/enroll-requests/${id}`);
+}
+
 export function approveEnrollRequest(id) {
   return http.post(`/teacher/enroll-requests/${id}/approve`);
 }

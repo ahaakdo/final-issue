@@ -20,6 +20,13 @@
             <el-table-column prop="student_number" label="学号" width="120" />
             <el-table-column prop="student_name" label="姓名" width="120" />
             <el-table-column prop="major" label="专业" min-width="120" />
+            <el-table-column label="技能概览" width="150" align="center">
+              <template #default="{ row }">
+                <span>攻{{ formatAvg(row.atk_avg) }} 传{{ formatAvg(row.set_avg) }} 防{{ formatAvg(row.def_avg) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="base_reach_cm" label="摸高" width="90" align="center" />
+            <el-table-column prop="phone" label="电话" width="120" />
             <el-table-column label="报名状态" width="140">
               <template #default="{ row }">
                 <el-tag
@@ -295,6 +302,12 @@ function formatScore(v) {
   if (v == null || v === "") return "—";
   const n = Number(v);
   return Number.isNaN(n) ? "—" : n.toFixed(2);
+}
+
+function formatAvg(v) {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  return Number.isNaN(n) ? "—" : n.toFixed(0);
 }
 
 /** 总成绩 = 出勤得分(40%) + 考试成绩×0.6(60%)，编辑成绩时实时更新 */

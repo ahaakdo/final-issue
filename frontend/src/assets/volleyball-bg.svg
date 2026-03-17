@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <defs>
+    <style>
+      .s{fill:none;stroke:#000;stroke-width:3;opacity:.06}
+      .t{fill:none;stroke:#000;stroke-width:2;opacity:.05}
+    </style>
+  </defs>
+  <circle class="s" cx="160" cy="160" r="110"/>
+  <path class="t" d="M50 160c40-40 120-55 220-40"/>
+  <path class="t" d="M70 95c55 25 105 85 120 175"/>
+  <path class="t" d="M250 120c-65 10-120 60-150 140"/>
+  <path class="t" d="M120 55c25 55 85 105 175 120"/>
+  <path class="t" d="M200 265c-25-55-85-105-175-120"/>
+</svg>
+

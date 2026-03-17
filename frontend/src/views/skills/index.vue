@@ -160,6 +160,26 @@
             <h3>我的队伍</h3>
             <div class="team-actions">
               <span class="tips">队伍加入与退出需由教师端审核</span>
+              <el-tag
+                v-if="hasPending"
+                size="small"
+                type="warning"
+                effect="plain"
+                style="margin-left: 8px"
+              >
+                {{ pendingText() }}
+              </el-tag>
+              <el-button
+                v-if="myTeam"
+                size="small"
+                type="danger"
+                plain
+                :disabled="hasPending"
+                @click="onLeaveTeam"
+                style="margin-left: 8px"
+              >
+                申请退出
+              </el-button>
             </div>
           </div>
           <div v-if="myTeam" class="team-info">
@@ -174,7 +194,11 @@
               border
               class="team-table"
             >
-              <el-table-column prop="student_name" label="姓名" width="80" />
+              <el-table-column label="姓名" width="80">
+                <template #default="{ row }">
+                  {{ row.real_name || row.student_name || row.student_number }}
+                </template>
+              </el-table-column>
               <el-table-column prop="student_number" label="学号" width="90" />
               <el-table-column prop="court_position" label="位置" width="90" />
               <el-table-column prop="major" label="专业" min-width="80" />
@@ -251,6 +275,19 @@
               width="70"
               align="center"
             />
+            <el-table-column label="操作" width="110" align="center">
+              <template #default="{ row }">
+                <el-button
+                  size="small"
+                  type="primary"
+                  link
+                  :disabled="!!myTeam || hasPending || Number(row.member_count) >= 7"
+                  @click="onJoinTeam(row)"
+                >
+                  申请加入
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
           <el-empty
             v-else
@@ -267,8 +304,13 @@
 <script setup>
 defineOptions({ name: "Skills" });
 import { ref, reactive, computed, onMounted } from "vue";
-import { ElMessage } from "element-plus";
-import { getStudentSkills, getTeamOverview } from "@/api/skills";
+import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  getStudentSkills,
+  getTeamOverview,
+  requestJoinTeam,
+  requestLeaveTeam,
+} from "@/api/skills";
 import { formatRelativeTime } from "@/utils/format";
 
 const loadingSkills = ref(false);
@@ -292,6 +334,7 @@ const myTeam = ref(null);
 const teamMembers = ref([]);
 const onlineStudents = ref([]);
 const teams = ref([]);
+const pendingRequest = ref(null);
 
 function syncLocalValues() {
   for (const group of ["attack", "set", "defense", "custom"]) {
@@ -354,10 +397,59 @@ async function loadTeams() {
     teamMembers.value = data.teamMembers || [];
     onlineStudents.value = data.onlineStudents || [];
     teams.value = data.teams || [];
+    pendingRequest.value = data.pendingRequest || null;
   } catch {
     ElMessage.error("加载组队信息失败");
   } finally {
     loadingTeams.value = false;
+  }
+}
+
+const hasPending = computed(() => !!pendingRequest.value);
+
+function pendingText() {
+  if (!pendingRequest.value) return "";
+  return pendingRequest.value.type === "join"
+    ? "已有待审核的加入申请"
+    : "已有待审核的退出申请";
+}
+
+async function onJoinTeam(row) {
+  if (!row?.id) return;
+  try {
+    await ElMessageBox.confirm(
+      `确认申请加入「${row.name}」吗？需教师审核。`,
+      "申请加入队伍",
+      { type: "warning", confirmButtonText: "确定", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await requestJoinTeam(row.id);
+    ElMessage.success("已提交加入申请");
+    await loadTeams();
+  } catch (e) {
+    ElMessage.error(e?.message || "提交失败");
+  }
+}
+
+async function onLeaveTeam() {
+  try {
+    await ElMessageBox.confirm("确认申请退出当前队伍吗？需教师审核。", "申请退出队伍", {
+      type: "warning",
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+    });
+  } catch {
+    return;
+  }
+  try {
+    await requestLeaveTeam();
+    ElMessage.success("已提交退出申请");
+    await loadTeams();
+  } catch (e) {
+    ElMessage.error(e?.message || "提交失败");
   }
 }
 

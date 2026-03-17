@@ -16,8 +16,8 @@ export function getStudentCourseGrade(courseId) {
 }
 
 /** 报名课程 */
-export function enrollCourse(courseId) {
-  return http.post(`/courses/${courseId}/enroll`);
+export function enrollCourse(courseId, payload) {
+  return http.post(`/courses/${courseId}/enroll`, payload || {});
 }
 
 /** 取消报名 */
