@@ -274,7 +274,7 @@ skillsRouter.get(
       const studentId = req.auth.userId;
       await touchOnline(studentId);
 
-      const [teamRows, memberRows, onlineRows] = await Promise.all([
+      const [teamRows, memberRows, onlineRows, pendingRows] = await Promise.all([
         // 当前学生所在队伍
         query(
           `SELECT t.id, t.name, t.description, t.owner_student_id,
@@ -313,10 +313,20 @@ skillsRouter.get(
            ORDER BY l.last_active_at DESC
            LIMIT 50`
         ),
+        // 当前学生待处理的队伍申请（加入/退出）
+        query(
+          `SELECT id, team_id, type, status, created_at
+           FROM student_team_requests
+           WHERE student_id = ? AND status = 'pending'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [studentId]
+        ),
       ]);
 
       const myTeam = teamRows[0] || null;
       const teamMembers = memberRows;
+      const pendingRequest = pendingRows?.[0] || null;
 
       // 其他可加入队伍列表（简单展示所有队伍 + 人数）
       const otherTeams = await query(
@@ -336,6 +346,7 @@ skillsRouter.get(
           teamMembers,
           onlineStudents: onlineRows,
           teams: otherTeams,
+          pendingRequest,
         },
       });
     } catch (e) {
@@ -591,6 +602,16 @@ skillsRouter.post(
       }
       await touchOnline(studentId);
 
+      const pending = await query(
+        "SELECT id FROM student_team_requests WHERE student_id = ? AND status = 'pending' LIMIT 1",
+        [studentId]
+      );
+      if (pending.length) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "您已有待处理的队伍申请，请等待教师审核" });
+      }
+
       const existingMember = await query(
         "SELECT team_id FROM student_team_members WHERE student_id = ?",
         [studentId]
@@ -607,6 +628,14 @@ skillsRouter.post(
       );
       if (!teamRows.length) {
         return res.status(404).json({ code: 404, message: "队伍不存在" });
+      }
+
+      const [capRow] = await query(
+        "SELECT COUNT(*) AS cnt FROM student_team_members WHERE team_id = ?",
+        [teamId]
+      );
+      if ((capRow?.cnt ?? 0) >= 7) {
+        return res.status(400).json({ code: 400, message: "该队伍人数已满" });
       }
 
       await query(
@@ -630,6 +659,16 @@ skillsRouter.post(
     try {
       const studentId = req.auth.userId;
       await touchOnline(studentId);
+
+      const pending = await query(
+        "SELECT id FROM student_team_requests WHERE student_id = ? AND status = 'pending' LIMIT 1",
+        [studentId]
+      );
+      if (pending.length) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "您已有待处理的队伍申请，请等待教师审核" });
+      }
 
       const rows = await query(
         `SELECT m.team_id
@@ -683,45 +722,87 @@ skillsRouter.get(
 );
 
 async function handleTeamRequest(id, teacherId, approve, comment) {
-  const [reqRow] = await query(
-    "SELECT * FROM student_team_requests WHERE id = ?",
-    [id]
-  );
+  const [reqRow] = await query("SELECT * FROM student_team_requests WHERE id = ?", [
+    id,
+  ]);
   if (!reqRow || reqRow.status !== "pending") {
     return { ok: false, message: "申请不存在或已处理" };
   }
-  const status = approve ? "approved" : "rejected";
-
-  await query(
-    `UPDATE student_team_requests
-     SET status = ?, comment = ?, handled_at = NOW(), handled_by_teacher_id = ?
-     WHERE id = ?`,
-    [status, comment || null, teacherId, id]
-  );
 
   if (!approve) {
+    await query(
+      `UPDATE student_team_requests
+       SET status = 'rejected', comment = ?, handled_at = NOW(), handled_by_teacher_id = ?
+       WHERE id = ?`,
+      [comment || null, teacherId, id]
+    );
     return { ok: true };
   }
 
-  if (reqRow.type === "join") {
-    const existing = await query(
-      "SELECT team_id FROM student_team_members WHERE student_id = ?",
-      [reqRow.student_id]
-    );
-    if (!existing.length) {
+  // 审批通过：需要先校验，再实际入队/退队，然后将申请标记为 approved
+  await query("START TRANSACTION");
+  try {
+    if (reqRow.type === "join") {
+      const existing = await query(
+        "SELECT team_id FROM student_team_members WHERE student_id = ? FOR UPDATE",
+        [reqRow.student_id]
+      );
+      if (existing.length) {
+        throw new Error("该学生已在其他队伍中");
+      }
+      const teamExists = await query("SELECT id FROM student_teams WHERE id = ?", [
+        reqRow.team_id,
+      ]);
+      if (!teamExists.length) {
+        throw new Error("队伍不存在");
+      }
+      const [capRow] = await query(
+        "SELECT COUNT(*) AS cnt FROM student_team_members WHERE team_id = ? FOR UPDATE",
+        [reqRow.team_id]
+      );
+      if ((capRow?.cnt ?? 0) >= 7) {
+        throw new Error("队伍人数已满");
+      }
       await query(
         `INSERT INTO student_team_members (team_id, student_id, role)
          VALUES (?, ?, 'member')`,
         [reqRow.team_id, reqRow.student_id]
       );
+    } else if (reqRow.type === "leave") {
+      const memberRows = await query(
+        "SELECT role FROM student_team_members WHERE team_id = ? AND student_id = ? FOR UPDATE",
+        [reqRow.team_id, reqRow.student_id]
+      );
+      if (!memberRows.length) {
+        throw new Error("该学生当前不在该队伍中");
+      }
+      const teamRows = await query(
+        "SELECT owner_student_id FROM student_teams WHERE id = ?",
+        [reqRow.team_id]
+      );
+      const isOwner = teamRows[0]?.owner_student_id === reqRow.student_id;
+      const isCaptain = memberRows[0]?.role === "captain";
+      if (isOwner || isCaptain) {
+        throw new Error("队长不可直接退出，请先由教师端调整队长/重组队伍");
+      }
+      await query(
+        "DELETE FROM student_team_members WHERE team_id = ? AND student_id = ?",
+        [reqRow.team_id, reqRow.student_id]
+      );
     }
-  } else if (reqRow.type === "leave") {
+
     await query(
-      "DELETE FROM student_team_members WHERE team_id = ? AND student_id = ?",
-      [reqRow.team_id, reqRow.student_id]
+      `UPDATE student_team_requests
+       SET status = 'approved', comment = ?, handled_at = NOW(), handled_by_teacher_id = ?
+       WHERE id = ?`,
+      [comment || null, teacherId, id]
     );
+    await query("COMMIT");
+    return { ok: true };
+  } catch (err) {
+    await query("ROLLBACK");
+    return { ok: false, message: err?.message || "审批失败" };
   }
-  return { ok: true };
 }
 
 skillsRouter.post(
