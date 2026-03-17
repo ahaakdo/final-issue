@@ -10,9 +10,18 @@ export function getTeamOverview() {
   return http.get("/student/teams/overview");
 }
 
+// 老师端：学生列表（用于技能管理）
+export function getStudentListForTeacher() {
+  return http.get("/teacher/students");
+}
+
 // 老师端：查看 / 修改学生技能
 export function getStudentSkillsByTeacher(studentId) {
   return http.get(`/teacher/students/${studentId}/skills`);
+}
+
+export function updateStudentProfileByTeacher(studentId, data) {
+  return http.post(`/teacher/students/${studentId}/profile`, data);
 }
 
 export function updateStudentSkillsByTeacher(studentId, updates) {
